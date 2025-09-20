@@ -5,6 +5,7 @@ header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 
 include 'config.php';
+require_token_and_role($conn, ['admin','receiver']); // <<< يسمح للاثنين
 
 $order_id = intval($_GET['order_id'] ?? 0);
 if ($order_id <= 0) {
