@@ -6,6 +6,7 @@ header('Access-Control-Allow-Origin: *');
 
 include 'config.php';
 
+
 $sql = "SELECT * FROM offers";
 $result = $conn->query($sql);
 

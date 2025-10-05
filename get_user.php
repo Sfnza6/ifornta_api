@@ -47,7 +47,7 @@ $sql = "SELECT
           COALESCE(username,'')  AS username,
           COALESCE(phone,'')     AS phone,
           COALESCE(created_at,'') AS created_at
-        FROM users
+        FROM app_users
         ORDER BY id DESC";
 
 $res = $conn->query($sql);

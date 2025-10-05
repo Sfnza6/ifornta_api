@@ -5,7 +5,7 @@
 $host     = "localhost";   // أو 127.0.0.1 على السيرفر
 $user     = "root";        // اسم المستخدم
 $password = "";            // كلمة مرور MySQL
-$dbname   = "iforenta_app"; // اسم قاعدة البيانات
+$dbname   = "db"; // اسم قاعدة البيانات
 
 // ===== الاتصال =====
 $conn = new mysqli($host, $user, $password, $dbname);

@@ -1,50 +1,104 @@
 <?php
 // iforenta_api/add_to_cart.php
-error_reporting(0);
-header('Content-Type: application/json');
+declare(strict_types=1);
+
+// ===== Headers / CORS =====
+header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Methods: POST, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { exit; }
 
-include 'config.php';
+require_once __DIR__ . '/config.php';
+mysqli_set_charset($conn, 'utf8mb4');
 
-$input = json_decode(file_get_contents('php://input'), true);
-if (json_last_error() === JSON_ERROR_NONE) {
-  $user_id = intval($input['user_id'] ?? 0);
-  $item_id = intval($input['item_id'] ?? 0);
-  $qty     = intval($input['quantity'] ?? 1);
-} else {
-  $user_id = intval($_POST['user_id'] ?? 0);
-  $item_id = intval($_POST['item_id'] ?? 0);
-  $qty     = intval($_POST['quantity'] ?? 1);
-}
-
-if ($user_id <= 0 || $item_id <= 0 || $qty <= 0) {
-  http_response_code(400);
-  echo json_encode(['status'=>'error','message'=>'invalid parameters']);
+// ===== Helpers =====
+function jdie(bool $ok, array $data = [], int $code = 200): void {
+  http_response_code($code);
+  echo json_encode(['ok' => $ok] + $data, JSON_UNESCAPED_UNICODE);
   exit;
 }
-
-// إذا كانت الصنف موجود بالفعل نحدّث الكمية
-$sqlCheck = "SELECT id, quantity FROM cart_items WHERE user_id=? AND item_id=?";
-$stmt = $conn->prepare($sqlCheck);
-$stmt->bind_param("ii", $user_id, $item_id);
-$stmt->execute();
-$res = $stmt->get_result();
-
-if ($row = $res->fetch_assoc()) {
-  $newQty = $row['quantity'] + $qty;
-  $sqlUpd = "UPDATE cart_items SET quantity=? WHERE id=?";
-  $st2 = $conn->prepare($sqlUpd);
-  $st2->bind_param("ii", $newQty, $row['id']);
-  $st2->execute();
-  $cart_id = $row['id'];
-} else {
-  $sqlIns = "INSERT INTO cart_items (user_id, item_id, quantity) VALUES (?, ?, ?)";
-  $st3 = $conn->prepare($sqlIns);
-  $st3->bind_param("iii", $user_id, $item_id, $qty);
-  $st3->execute();
-  $cart_id = $st3->insert_id;
+function intParam($arr, string $key, int $default = 0): int {
+  if (!isset($arr[$key])) return $default;
+  return (int)filter_var($arr[$key], FILTER_VALIDATE_INT, ['options' => ['default' => $default]]);
 }
 
-echo json_encode(['status'=>'success','cart_item_id'=>$cart_id]);
+// ===== Read input (JSON or form) =====
+$input = json_decode(file_get_contents('php://input'), true);
+if (json_last_error() === JSON_ERROR_NONE && is_array($input)) {
+  $user_id = intParam($input, 'user_id');
+  $item_id = intParam($input, 'item_id');
+  $qty     = intParam($input, 'quantity', 1);
+} else {
+  $user_id = intParam($_POST, 'user_id');
+  $item_id = intParam($_POST, 'item_id');
+  $qty     = intParam($_POST, 'quantity', 1);
+}
+
+// Sanitize
+$qty = max(1, $qty);
+if ($user_id <= 0 || $item_id <= 0) {
+  jdie(false, ['message' => 'invalid parameters'], 400);
+}
+
+/**
+ * خيار 1 (مستحسن): لو عندك قيد فريد UNIQUE(user_id, item_id) في جدول cart
+ * نستخدم ON DUPLICATE KEY لدمج الكمية وتحديث updated_at.
+ */
+$sql = "INSERT INTO cart (user_id, item_id, quantity, created_at, updated_at)
+        VALUES (?, ?, ?, NOW(), NOW())
+        ON DUPLICATE KEY UPDATE
+          quantity = quantity + VALUES(quantity),
+          updated_at = NOW()";
+
+$stmt = $conn->prepare($sql);
+if (!$stmt) {
+  jdie(false, ['message' => 'prepare failed: '.$conn->error], 500);
+}
+$stmt->bind_param('iii', $user_id, $item_id, $qty);
+
+if (!$stmt->execute()) {
+  jdie(false, ['message' => 'execute failed: '.$stmt->error], 500);
+}
+
+// نحاول إحضار السطر النهائي بعد العملية
+$sel = $conn->prepare("SELECT id, user_id, item_id, quantity, created_at, updated_at FROM cart WHERE user_id=? AND item_id=? LIMIT 1");
+$sel->bind_param('ii', $user_id, $item_id);
+$sel->execute();
+$res = $sel->get_result();
+
+$row = $res ? $res->fetch_assoc() : null;
+if (!$row) {
+  // في حالات نادرة جدًا لو ما رجعش، نرجّع نجاح بدون تفاصيل
+  jdie(true, ['message' => 'added', 'user_id' => $user_id, 'item_id' => $item_id, 'quantity_added' => $qty]);
+}
+
+// ممكن تحب ترجع السعر والإجمالي من items:
+$price = null;
+$pi = $conn->prepare("SELECT price FROM items WHERE id=? LIMIT 1");
+$pi->bind_param('i', $item_id);
+$pi->execute();
+$pir = $pi->get_result();
+if ($pir && ($pr = $pir->fetch_assoc())) {
+  $price = (float)$pr['price'];
+}
+
+$out = [
+  'message'   => 'added',
+  'cart_item' => [
+    'id'         => (int)$row['id'],
+    'user_id'    => (int)$row['user_id'],
+    'item_id'    => (int)$row['item_id'],
+    'quantity'   => (int)$row['quantity'],
+    'created_at' => $row['created_at'],
+    'updated_at' => $row['updated_at'],
+  ],
+];
+
+// لو عرفنا السعر، نحسب line_total الحالي
+if ($price !== null) {
+  $out['cart_item']['price'] = $price;
+  $out['cart_item']['line_total'] = $price * (int)$row['quantity'];
+}
+
+jdie(true, $out);

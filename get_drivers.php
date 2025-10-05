@@ -6,7 +6,7 @@ header('Access-Control-Allow-Origin: *');
 
 include 'config.php';
 
-$res = $conn->query("SELECT id,name,phone,created_at FROM drivers ORDER BY id DESC");
+$res = $conn->query("SELECT id,name,phone,created_at FROM app_drivers ORDER BY id DESC");
 $drivers = [];
 while ($row = $res->fetch_assoc()) {
     $drivers[] = $row;

@@ -16,7 +16,7 @@ if ($username === "" || $phone === "" || $password === "") {
 }
 
 // التحقق إن كان رقم الهاتف موجوداً مسبقاً
-$query = "SELECT * FROM users WHERE phone = ?";
+$query = "SELECT * FROM app_users WHERE phone = ?";
 $stmt  = $conn->prepare($query);
 $stmt->bind_param("s", $phone);
 $stmt->execute();
@@ -31,7 +31,7 @@ if ($result->num_rows > 0) {
 }
 
 // إدراج سجل المستخدم الجديد
-$insertQuery = "INSERT INTO users (username, phone, password) VALUES (?, ?, ?)";
+$insertQuery = "INSERT INTO app_users (username, phone, password) VALUES (?, ?, ?)";
 $insertStmt  = $conn->prepare($insertQuery);
 $insertStmt->bind_param("sss", $username, $phone, $password);
 

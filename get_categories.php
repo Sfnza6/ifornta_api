@@ -3,6 +3,7 @@ error_reporting(0);                // إخفاء التحذيرات
 header('Content-Type: application/json');
 include 'config.php';
 
+
 $sql = "SELECT * FROM categories";
 $result = $conn->query($sql);
 

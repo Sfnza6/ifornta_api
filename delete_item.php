@@ -1,90 +1,59 @@
 <?php
-// iforenta_api/delete_item.php
+// delete_item.php (mysqli)
 declare(strict_types=1);
-
-// ===== Headers & CORS =====
 header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
 
-ini_set('display_errors', '0');      // لا تطبع HTML errors
-error_reporting(E_ALL);
+require_once __DIR__ . '/config.php';
 
-// ردّ على OPTIONS (preflight)
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(204);
-    exit;
-}
-
-// دالة رد JSON نظيف
-function respond(int $code, array $data): void {
-    if (function_exists('ob_get_length') && ob_get_length()) { @ob_clean(); }
-    http_response_code($code);
-    echo json_encode($data, JSON_UNESCAPED_UNICODE);
-    exit;
-}
-
-// التقط الـ Fatal وأعد JSON
-register_shutdown_function(function () {
-    $e = error_get_last();
-    if ($e && in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
-        respond(500, ['status' => 'error', 'message' => 'Fatal: '.$e['message']]);
-    }
-});
-
-// اسمح فقط بـ POST
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    respond(405, ['status' => 'error', 'message' => 'Method not allowed']);
-}
-
-require_once __DIR__ . '/config.php'; // تأكد أن هذا الملف لا يطبع أي شيء
-
-if (!isset($conn) || !$conn) {
-    respond(500, ['status' => 'error', 'message' => ($GLOBALS['DB_CONNECT_ERROR'] ?? 'DB not initialized')]);
-}
-
-// جدول وعمود المفتاح
-$table = 'items';
-$pk    = 'id';
-
-// استلام id من JSON أو POST
-$raw = file_get_contents('php://input');
-$payload = json_decode((string)$raw, true);
-$id = 0;
-
-if (is_array($payload) && isset($payload['id'])) {
-    $id = (int)$payload['id'];
-} elseif (isset($_POST['id'])) {
-    $id = (int)$_POST['id'];
-}
-
+// 1) id
+$id = isset($_POST['id']) ? (int)$_POST['id'] : (isset($_GET['id']) ? (int)$_GET['id'] : 0);
 if ($id <= 0) {
-    respond(400, ['status' => 'error', 'message' => 'invalid id']);
+  echo json_encode(['ok'=>false, 'message'=>'id غير صالح'], JSON_UNESCAPED_UNICODE);
+  exit;
 }
 
-// حضّر ونفّذ
-$stmt = $conn->prepare("DELETE FROM {$table} WHERE {$pk} = ?");
+// 2) اقرأ السجل أولاً (للحصول على رابط الصورة إن وجد)
+$img = '';
+$stmt = $conn->prepare("SELECT image_url FROM items WHERE id = ? LIMIT 1");
 if (!$stmt) {
-    respond(500, ['status' => 'error', 'message' => $conn->error]);
+  echo json_encode(['ok'=>false, 'message'=>'DB prepare: '.$conn->error], JSON_UNESCAPED_UNICODE);
+  exit;
 }
 $stmt->bind_param('i', $id);
-
-if (!$stmt->execute()) {
-    $err = $stmt->error ?: 'Delete failed';
-    $stmt->close();
-    respond(500, ['status' => 'error', 'message' => $err]);
-}
-
-// تحقّق من عدد الصفوف المتأثرة
-$affected = $stmt->affected_rows;
+$stmt->execute();
+$res = $stmt->get_result();
+$row = $res ? $res->fetch_assoc() : null;
 $stmt->close();
 
-if ($affected > 0) {
-    respond(200, ['status' => 'success']);
-} else {
-    // لم يتم العثور على السجل
-    respond(404, ['status' => 'error', 'message' => 'not found']);
+if (!$row) {
+  // لا نعيد 404 حتى لا يظهر Network Error في التطبيق
+  echo json_encode(['ok'=>false, 'message'=>'العنصر غير موجود'], JSON_UNESCAPED_UNICODE);
+  exit;
+}
+$img = (string)($row['image_url'] ?? '');
+
+// 3) احذف السجل
+$stmt = $conn->prepare("DELETE FROM items WHERE id = ? LIMIT 1");
+if (!$stmt) {
+  echo json_encode(['ok'=>false, 'message'=>'DB prepare: '.$conn->error], JSON_UNESCAPED_UNICODE);
+  exit;
+}
+$stmt->bind_param('i', $id);
+$ok = $stmt->execute();
+$err = $stmt->error;
+$aff = $stmt->affected_rows;
+$stmt->close();
+
+if (!$ok || $aff < 1) {
+  echo json_encode(['ok'=>false, 'message'=>'DB execute: '.$err], JSON_UNESCAPED_UNICODE);
+  exit;
 }
 
-// ملاحظة: لا تضع وسم إغلاق PHP لتجنّب أي مسافات إضافية.
+// 4) امسح ملف الصورة فقط إن كان موجودًا
+if ($img !== '' && strpos($img, BASE_URL.'/uploads/') === 0) {
+  $rel  = substr($img, strlen(BASE_URL)); // "/uploads/xxx.jpg"
+  $path = __DIR__ . $rel;                  // "<dir>/uploads/xxx.jpg"
+  if (is_file($path)) { @unlink($path); }
+}
+
+echo json_encode(['ok'=>true, 'id'=>$id], JSON_UNESCAPED_UNICODE);

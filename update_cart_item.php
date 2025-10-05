@@ -1,35 +1,46 @@
 <?php
 // iforenta_api/update_cart_item.php
-error_reporting(0);
-header('Content-Type: application/json');
+declare(strict_types=1);
+
+header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Methods: POST, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { exit; }
 
-include 'config.php';
+require_once __DIR__ . '/config.php';
+mysqli_set_charset($conn, 'utf8mb4');
 
-$input = json_decode(file_get_contents('php://input'), true);
-if (json_last_error() === JSON_ERROR_NONE) {
-  $cart_id = intval($input['cart_item_id'] ?? 0);
-  $qty     = intval($input['quantity'] ?? 1);
-} else {
-  $cart_id = intval($_POST['cart_item_id'] ?? 0);
-  $qty     = intval($_POST['quantity'] ?? 1);
-}
-
-if ($cart_id <= 0 || $qty <= 0) {
-  http_response_code(400);
-  echo json_encode(['status'=>'error','message'=>'invalid parameters']);
+function jdie(bool $ok, array $data = [], int $code = 200): void {
+  http_response_code($code);
+  echo json_encode(['ok'=>$ok] + $data, JSON_UNESCAPED_UNICODE);
   exit;
 }
 
-$sql = "UPDATE cart_items SET quantity=? WHERE id=?";
-$stmt = $conn->prepare($sql);
-$stmt->bind_param("ii", $qty, $cart_id);
+$input = json_decode(file_get_contents('php://input'), true);
+$user_id = intval($input['user_id'] ?? ($_POST['user_id'] ?? 0));
+$item_id = intval($input['item_id'] ?? ($_POST['item_id'] ?? 0));
+$qty     = intval($input['quantity'] ?? ($_POST['quantity'] ?? 1));
 
-if ($stmt->execute()) {
-  echo json_encode(['status'=>'success']);
+if ($user_id <= 0 || $item_id <= 0) {
+  jdie(false, ['message'=>'invalid user_id/item_id'], 400);
+}
+
+if ($qty <= 0) {
+  $sql = "DELETE FROM cart WHERE user_id=? AND item_id=? LIMIT 1";
+  $st = $conn->prepare($sql);
+  $st->bind_param("ii", $user_id, $item_id);
+  $st->execute();
+  jdie(true, ['message'=>'removed']);
+}
+
+$sql = "UPDATE cart SET quantity=?, updated_at=NOW() WHERE user_id=? AND item_id=? LIMIT 1";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("iii", $qty, $user_id, $item_id);
+$stmt->execute();
+
+if ($stmt->affected_rows > 0) {
+  jdie(true, ['message'=>'updated','quantity'=>$qty]);
 } else {
-  http_response_code(500);
-  echo json_encode(['status'=>'error','message'=>$stmt->error]);
+  jdie(true, ['message'=>'no change','quantity'=>$qty]);
 }

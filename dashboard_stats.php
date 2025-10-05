@@ -46,13 +46,13 @@ $drivers   = 0; // ← بدلنا الإيرادات بعدد السائقين
 if ($q = $conn->query("SELECT COUNT(*) AS c FROM items")) {
     $items = (int)($q->fetch_assoc()['c'] ?? 0);
 }
-if ($q = $conn->query("SELECT COUNT(*) AS c FROM orders")) {
+if ($q = $conn->query("SELECT COUNT(*) AS c FROM app_orders")) {
     $orders = (int)($q->fetch_assoc()['c'] ?? 0);
 }
-if ($q = $conn->query("SELECT COUNT(*) AS c FROM users")) {
+if ($q = $conn->query("SELECT COUNT(*) AS c FROM app_users")) {
     $customers = (int)($q->fetch_assoc()['c'] ?? 0);
 }
-if ($q = $conn->query("SELECT COUNT(*) AS c FROM drivers")) {
+if ($q = $conn->query("SELECT COUNT(*) AS c FROM app_drivers")) {
     $drivers = (int)($q->fetch_assoc()['c'] ?? 0);
 }
 

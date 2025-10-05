@@ -15,7 +15,7 @@ if ($phone === "" || $password === "") {
 }
 
 // التحقق من صحة بيانات الدخول
-$query = "SELECT * FROM users WHERE phone = ? AND password = ?";
+$query = "SELECT * FROM app_users WHERE phone = ? AND password = ?";
 $stmt  = $conn->prepare($query);
 $stmt->bind_param("ss", $phone, $password);
 $stmt->execute();
