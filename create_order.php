@@ -43,9 +43,9 @@ $payment      = is_numeric($payment) ? (int)$payment : 0;
 $total_raw    = (string)$IN('total', '0');
 $total        = is_numeric($total_raw) ? (float)$total_raw : 0.0;
 
-$status_order = strtolower(trim((string)$IN('status_order', 'delivery'))); // delivery|pickup
+$status_order = strtolower(trim((string)$IN('status_order', default: 'delivery'))); // delivery|pickup
 if ($status_order !== 'delivery' && $status_order !== 'pickup') $status_order = 'delivery';
-
+ 
 // geo (اختياري — نخزن 0.0 إن لم تصل)
 $dest_lat   = $IN('dest_lat', null);
 $dest_lng   = $IN('dest_lng', null);

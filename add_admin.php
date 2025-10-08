@@ -2,29 +2,35 @@
 declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { exit; }
+require_once __DIR__ . '/config.php';
 
-require_once __DIR__.'/config.php';
-function out($a,$c=200){ http_response_code($c); echo json_encode($a, JSON_UNESCAPED_UNICODE); exit; }
+$name   = trim($_POST['name'] ?? '');
+$phone  = trim($_POST['phone'] ?? '');
+$pass   = trim($_POST['password'] ?? '');
+$role   = trim($_POST['role'] ?? 'admin');
+$active = intval($_POST['is_active'] ?? 1);
+$avatar = trim($_POST['avatar_url'] ?? ''); // اختياري (رابط صورة)
 
-$body = json_decode(file_get_contents('php://input'), true) ?: $_POST;
-
-$name  = trim((string)($body['name']  ?? ''));
-$phone = trim((string)($body['phone'] ?? ''));
-$pass  = (string)($body['password'] ?? '');
-$role  = trim((string)($body['role']  ?? 'admin'));
-$avatar= trim((string)($body['avatar_url'] ?? ''));
-
-if ($name==='' || $phone==='' || $pass==='') out(['status'=>'error','message'=>'name/phone/password required'], 400);
-
-$hash = password_hash($pass, PASSWORD_BCRYPT);
-
-$stmt = $conn->prepare("INSERT INTO admins (name,phone,password_hash,avatar_url,role) VALUES (?,?,?,?,?)");
-$stmt->bind_param('sssss', $name,$phone,$hash,$avatar,$role);
-if ($stmt->execute()) {
-  out(['status'=>'success','id'=>$stmt->insert_id]);
-} else {
-  out(['status'=>'error','message'=>$conn->error], 500);
+if ($name === '' || $phone === '' || $pass === '') {
+  http_response_code(400);
+  echo json_encode(['status'=>'error','message'=>'name/phone/password required'], JSON_UNESCAPED_UNICODE);
+  exit;
 }
+$allowed = ['admin','receiver'];
+if (!in_array($role, $allowed, true)) $role = 'admin';
+
+$hash  = password_hash($pass, PASSWORD_BCRYPT);
+$token = bin2hex(random_bytes(16));
+
+$sql = "INSERT INTO admins (name, phone, password_hash, avatar_url, role, api_token, is_active, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, NOW())";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param('ssssssi', $name, $phone, $hash, $avatar, $role, $token, $active);
+
+if ($stmt->execute()) {
+  echo json_encode(['status'=>'success','id'=>$stmt->insert_id], JSON_UNESCAPED_UNICODE);
+} else {
+  http_response_code(500);
+  echo json_encode(['status'=>'error','message'=>$stmt->error], JSON_UNESCAPED_UNICODE);
+}
+$stmt->close();

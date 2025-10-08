@@ -23,7 +23,7 @@ if ($name === '' || $phone === '' || $pass === '') {
 // هشّ كلمة المرور
 $hash = password_hash($pass, PASSWORD_BCRYPT);
 
-$sql  = "INSERT INTO drivers (name,phone,password) VALUES (?,?,?)";
+$sql  = "INSERT INTO app_drivers (name,phone,password) VALUES (?,?,?)";
 $stmt = $conn->prepare($sql);
 $stmt->bind_param("sss", $name, $phone, $hash);
 

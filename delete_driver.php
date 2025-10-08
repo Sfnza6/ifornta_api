@@ -15,7 +15,7 @@ if ($id <= 0) {
     exit;
 }
 
-$stmt = $conn->prepare("DELETE FROM drivers WHERE id=?");
+$stmt = $conn->prepare("DELETE FROM app_drivers WHERE id=?");
 $stmt->bind_param("i", $id);
 
 if ($stmt->execute()) {
